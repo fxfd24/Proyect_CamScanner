@@ -1,0 +1,1196 @@
+﻿=== sketch_mar2b.ino ===
+/**
+ * CГіdigo para Arduino Uno
+ * Responde a comandos de Python:
+ * - OPEN   в†’ Servo se mueve a 90В° y regresa a 0В° (LED no cambia)
+ * - DENIED в†’ LED se enciende 1 segundo y se apaga (servo no se mueve)
+ */
+
+#include <Servo.h>
+
+const int LED_PIN = 11;
+const int SERVO_PIN = 9;
+
+Servo miServo;
+String comando = "";
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);  // LED apagado inicialmente
+  
+  miServo.attach(SERVO_PIN);
+  miServo.write(0);  // Servo en posiciГіn cerrada (0В°)
+  
+  Serial.println("Arduino listo - Esperando comandos...");
+}
+
+void loop() {
+  if (Serial.available() > 0) {
+    comando = Serial.readStringUntil('\n');
+    comando.trim();
+    
+    if (comando == "OPEN") {
+      // ===== ACCESO CONCEDIDO =====
+      Serial.println("COMANDO: OPEN - Acceso CONCEDIDO");
+      
+      // Mover servo a 90В° (abrir)
+      miServo.write(90);
+      delay(1000);  // Esperar 1 segundo
+      
+      // Regresar servo a 0В° (cerrar)
+      miServo.write(0);
+      
+      Serial.println("   вњ… Servo: 90В° в†’ 0В° (abriГі y cerrГі)");
+    } 
+    else if (comando == "DENIED") {
+      // ===== ACCESO DENEGADO =====
+      Serial.println("COMANDO: DENIED - Acceso DENEGADO");
+      
+      // Encender LED por 1 segundo
+      digitalWrite(LED_PIN, HIGH);
+      delay(1000);  // LED encendido 1 segundo
+      digitalWrite(LED_PIN, LOW);
+      
+      Serial.println("   вќЊ LED: Encendido 1 segundo");
+    }
+  }
+  
+  delay(10);
+}
+
+=== sketch_mar8a.ino ===
+/**
+ * CГ“DIGO ESP32-CAM - VERSIГ“N ULTRA SIMPLE
+ * Solo hace una cosa: capturar y enviar foto
+ */
+
+#include "esp_camera.h"
+#include <WiFi.h>
+
+// ===== CONFIGURACIГ“N WiFi =====
+const char* ssid = "Awebo";
+const char* password = "ILovelagopus253";
+
+// ===== PINES PARA AI-THINKER ESP32-CAM =====
+#define PWDN_GPIO_NUM     32
+#define RESET_GPIO_NUM    -1
+#define XCLK_GPIO_NUM      0
+#define SIOD_GPIO_NUM     26
+#define SIOC_GPIO_NUM     27
+#define Y9_GPIO_NUM       35
+#define Y8_GPIO_NUM       34
+#define Y7_GPIO_NUM       39
+#define Y6_GPIO_NUM       36
+#define Y5_GPIO_NUM       21
+#define Y4_GPIO_NUM       19
+#define Y3_GPIO_NUM       18
+#define Y2_GPIO_NUM        5
+#define VSYNC_GPIO_NUM    25
+#define HREF_GPIO_NUM     23
+#define PCLK_GPIO_NUM     22
+
+// LED Flash
+#define LED_FLASH 4
+
+// Servidor web
+WiFiServer server(80);
+
+// Variable para contar fotos
+int foto_count = 0;
+
+void setup() {
+  Serial.begin(115200);
+  Serial.println("\n\n=== INICIANDO ESP32-CAM (VERSIГ“N ULTRA SIMPLE) ===");
+  
+  pinMode(LED_FLASH, OUTPUT);
+  digitalWrite(LED_FLASH, LOW);
+  
+  // ConfiguraciГіn MГЌNIMA de cГЎmara
+  camera_config_t config;
+  config.ledc_channel = LEDC_CHANNEL_0;
+  config.ledc_timer = LEDC_TIMER_0;
+  config.pin_d0 = Y2_GPIO_NUM;
+  config.pin_d1 = Y3_GPIO_NUM;
+  config.pin_d2 = Y4_GPIO_NUM;
+  config.pin_d3 = Y5_GPIO_NUM;
+  config.pin_d4 = Y6_GPIO_NUM;
+  config.pin_d5 = Y7_GPIO_NUM;
+  config.pin_d6 = Y8_GPIO_NUM;
+  config.pin_d7 = Y9_GPIO_NUM;
+  config.pin_xclk = XCLK_GPIO_NUM;
+  config.pin_pclk = PCLK_GPIO_NUM;
+  config.pin_vsync = VSYNC_GPIO_NUM;
+  config.pin_href = HREF_GPIO_NUM;
+  config.pin_sscb_sda = SIOD_GPIO_NUM;
+  config.pin_sscb_scl = SIOC_GPIO_NUM;
+  config.pin_pwdn = PWDN_GPIO_NUM;
+  config.pin_reset = RESET_GPIO_NUM;
+  config.xclk_freq_hz = 10000000;
+  config.pixel_format = PIXFORMAT_JPEG;
+  config.frame_size = FRAMESIZE_QVGA;    // 320x240
+  config.jpeg_quality = 8;                // Calidad media
+  config.fb_count = 1;
+
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("Error cГЎmara: 0x%x\n", err);
+    return;
+  }
+  Serial.println("вњ… CГЎmara OK");
+
+  // WiFi
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nвњ… WiFi OK");
+  Serial.print("рџ“Ў IP: http://");
+  Serial.println(WiFi.localIP());
+  
+  server.begin();
+  Serial.println("рџљЂ Servidor listo");
+}
+
+void loop() {
+  WiFiClient client = server.available();
+  if (!client) {
+    delay(10);
+    return;
+  }
+  
+  foto_count++;
+  Serial.printf("\nрџ“ё PeticiГіn #%d recibida\n", foto_count);
+  
+  // Leer y descartar toda la peticiГіn
+  while (client.available()) {
+    client.read();
+  }
+  
+  // Encender flash
+  digitalWrite(LED_FLASH, HIGH);
+  delay(100);
+  
+  // Capturar foto
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("вќЊ Error capturando");
+    digitalWrite(LED_FLASH, LOW);
+    client.stop();
+    return;
+  }
+  
+  digitalWrite(LED_FLASH, LOW);
+  
+  // ENVГЌO DIRECTO - SIN COMPLICACIONES
+  client.print("HTTP/1.1 200 OK\r\n");
+  client.print("Content-Type: image/jpeg\r\n");
+  client.print("Content-Length: ");
+  client.print(fb->len);
+  client.print("\r\n");
+  client.print("Access-Control-Allow-Origin: *\r\n");
+  client.print("Connection: close\r\n");
+  client.print("\r\n");
+  
+  // Enviar toda la foto de una vez
+  size_t sent = client.write(fb->buf, fb->len);
+  
+  Serial.printf("вњ… Enviados %d de %d bytes\n", sent, fb->len);
+  
+  esp_camera_fb_return(fb);
+  
+  // Esperar a que se envГ­e todo
+  client.flush();
+  delay(50);
+  client.stop();
+}
+
+=== diagnostico.py ===
+import socket
+import urllib.request
+import subprocess
+import sys
+
+URL_CAMARA = "http://192.168.1.246"
+ip = URL_CAMARA.replace("http://", "")
+
+print("="*70)
+print("рџ”Ќ DIAGNГ“STICO DE CONEXIГ“N ESP32-CAM")
+print("="*70)
+
+# 1. IP de tu PC
+print("\nрџ“Љ 1. INFORMACIГ“N DE TU PC:")
+hostname = socket.gethostname()
+local_ip = socket.gethostbyname(hostname)
+print(f"   PC Hostname: {hostname}")
+print(f"   PC IP: {local_ip}")
+print(f"   Red de PC: {'.'.join(local_ip.split('.')[:3])}.x")
+
+# 2. Verificar misma red
+red_pc = '.'.join(local_ip.split('.')[:3])
+red_cam = '.'.join(ip.split('.')[:3])
+if red_pc == red_cam:
+    print(f"\nвњ… MISMA RED: {red_pc}.x")
+else:
+    print(f"\nвќЊ DIFERENTE RED: PC={red_pc}.x vs CГЎmara={red_cam}.x")
+
+# 3. Ping
+print(f"\nрџ“Ў 2. PING a {ip}:")
+try:
+    param = '-n' if sys.platform.lower() == 'win32' else '-c'
+    result = subprocess.run(['ping', param, '1', ip], 
+                          capture_output=True, text=True, timeout=3)
+    if result.returncode == 0:
+        print("   вњ… PING EXITOSO")
+    else:
+        print("   вќЊ PING FALLГ“")
+except Exception as e:
+    print(f"   вљ пёЏ Error: {e}")
+
+# 4. Puerto 80
+print(f"\nрџ”Њ 3. PUERTO 80:")
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(2)
+result = sock.connect_ex((ip, 80))
+if result == 0:
+    print("   вњ… Puerto 80 ABIERTO")
+else:
+    print(f"   вќЊ Puerto 80 CERRADO (cГіdigo {result})")
+sock.close()
+
+# 5. Prueba HTTP
+print(f"\nрџЊђ 4. PRUEBA HTTP:")
+try:
+    response = urllib.request.urlopen(f"{URL_CAMARA}/", timeout=3)
+    print(f"   вњ… Servidor web responde: HTTP {response.getcode()}")
+except Exception as e:
+    print(f"   вќЊ Error: {e}")
+
+# 6. Prueba capture
+print(f"\nрџ“ё 5. PRUEBA CAPTURE:")
+try:
+    response = urllib.request.urlopen(f"{URL_CAMARA}/capture", timeout=3)
+    print(f"   вњ… /capture responde: {len(response.read())} bytes")
+except Exception as e:
+    print(f"   вќЊ Error: {e}")
+
+print("\n" + "="*70)
+
+=== Diagnostico_cam.py ===
+import socket
+import urllib.request
+import subprocess
+import sys
+import time
+
+URL_CAMARA = "http://192.168.1.246"
+ip = URL_CAMARA.replace("http://", "")
+
+print("="*70)
+print("рџ”Ќ DIAGNГ“STICO COMPLETO DE CONEXIГ“N")
+print("="*70)
+
+# 1. IP de tu PC
+print("\nрџ“Љ 1. INFORMACIГ“N DE TU PC:")
+hostname = socket.gethostname()
+local_ip = socket.gethostbyname(hostname)
+print(f"   PC Hostname: {hostname}")
+print(f"   PC IP: {local_ip}")
+print(f"   Red de PC: {'.'.join(local_ip.split('.')[:3])}.x")
+
+# 2. Verificar misma red
+red_pc = '.'.join(local_ip.split('.')[:3])
+red_cam = '.'.join(ip.split('.')[:3])
+if red_pc == red_cam:
+    print(f"\nвњ… MISMA RED: {red_pc}.x")
+else:
+    print(f"\nвќЊ DIFERENTE RED: PC={red_pc}.x vs CГЎmara={red_cam}.x")
+    print("   IMPORTANTE: Deben estar en la misma red WiFi")
+
+# 3. Ping a la cГЎmara
+print(f"\nрџ“Ў 2. PING a {ip}:")
+try:
+    param = '-n' if sys.platform.lower() == 'win32' else '-c'
+    result = subprocess.run(['ping', param, '1', ip], 
+                          capture_output=True, text=True, timeout=3)
+    if result.returncode == 0:
+        print("   вњ… PING EXITOSO - La cГЎmara responde")
+        # Mostrar tiempo
+        for line in result.stdout.split('\n'):
+            if 'tiempo' in line.lower() or 'time' in line.lower():
+                print(f"   {line.strip()}")
+                break
+    else:
+        print("   вќЊ PING FALLГ“ - La cГЎmara no responde")
+        print("   Causa posible: Firewall bloqueando ICMP")
+except Exception as e:
+    print(f"   вљ пёЏ Error: {e}")
+
+# 4. Escaneo de puertos
+print(f"\nрџ”Њ 3. ESCANEO DE PUERTOS:")
+puertos = [80, 81, 8080, 8000]
+for puerto in puertos:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1)
+    result = sock.connect_ex((ip, puerto))
+    if result == 0:
+        print(f"   вњ… Puerto {puerto}: ABIERTO")
+    else:
+        print(f"   вќЊ Puerto {puerto}: CERRADO (cГіdigo {result})")
+    sock.close()
+
+# 5. Prueba HTTP bГЎsica
+print(f"\nрџЊђ 4. PRUEBA HTTP BГЃSICA:")
+try:
+    # Probar con socket primero
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(2)
+    sock.connect((ip, 80))
+    
+    # Enviar peticiГіn manual
+    request = f"GET / HTTP/1.1\r\nHost: {ip}\r\nConnection: close\r\n\r\n"
+    sock.send(request.encode())
+    
+    # Recibir respuesta
+    response = sock.recv(1024).decode()
+    print(f"   вњ… Socket responde: {response[:50]}...")
+    sock.close()
+except Exception as e:
+    print(f"   вќЊ Socket error: {e}")
+
+# 6. Prueba con urllib (la que usa tu cГіdigo)
+print(f"\nрџђЌ 5. PRUEBA CON URLLIB:")
+try:
+    # Probar pГЎgina principal
+    response = urllib.request.urlopen(f"{URL_CAMARA}/", timeout=3)
+    print(f"   вњ… / responde: HTTP {response.getcode()}")
+    print(f"   Content-Type: {response.headers.get('Content-Type')}")
+    response.close()
+except Exception as e:
+    print(f"   вќЊ Error en /: {type(e).__name__}: {e}")
+
+try:
+    # Probar /capture
+    print(f"\nрџ“ё 6. PRUEBA DE CAPTURA:")
+    response = urllib.request.urlopen(f"{URL_CAMARA}/capture", timeout=5)
+    print(f"   вњ… /capture responde: HTTP {response.getcode()}")
+    print(f"   TamaГ±o: {len(response.read())} bytes")
+    response.close()
+except Exception as e:
+    print(f"   вќЊ Error en capture: {type(e).__name__}: {e}")
+
+# 7. SoluciГіn especГ­fica
+print("\n" + "="*70)
+print("рџ”§ DIAGNГ“STICO Y SOLUCIГ“N:")
+if red_pc != red_cam:
+    print("вќЊ PROBLEMA: PC y cГЎmara en diferentes redes")
+    print("   SOLUCIГ“N: Conecta ambos a la MISMA red WiFi")
+elif not result or result.returncode != 0:
+    print("вќЊ PROBLEMA: Ping falla pero IP parece correcta")
+    print("   SOLUCIГ“N: Firewall bloqueando. DesactГ­valo temporalmente")
+else:
+    print("вњ… La cГЎmara responde a ping pero Python falla")
+    print("   SOLUCIГ“N PROBABLE: Firewall de Python/Windows")
+    print("   Intenta:")
+    print("   1. Ejecutar Python como administrador")
+    print("   2. Desactivar firewall temporalmente")
+    print("   3. Agregar Python a excepciones del firewall")
+print("="*70)
+
+=== main.py ===
+"""
+03_Codigo_Python/facial_recognition_system.py
+
+OPTIMIZED CONFIGURATION BASED ON REAL TEST RESULTS:
+- Best accuracy: Facenet512 + retinaface (0.0290) в­ђ
+- Best speed/balance: Facenet512 + mtcnn (0.0457) вњ…
+- Alternative: ArcFace + mtcnn (0.0970) рџҐ‰
+
+IMPROVEMENTS:
+- вњ… Face verification during capture
+- вњ… Retry mechanism for failed detections
+- вњ… Lighting advice
+- вњ… Robust error handling
+"""
+
+import cv2
+import serial
+import numpy as np
+import os
+import time
+import pickle
+from datetime import datetime
+from deepface import DeepFace
+import urllib.request
+import socket
+from collections import Counter
+
+# ============================================
+# CONFIGURATION
+# ============================================
+CURRENT_FOLDER = os.path.dirname(os.path.abspath(__file__))
+
+CAMERA_URL = "http://192.168.1.246"
+ARDUINO_PORT = "COM6"
+
+DB_PATH = os.path.join(CURRENT_FOLDER, "db")
+RECORDS_PATH = os.path.join(CURRENT_FOLDER, "records")
+REPRESENTATIONS_PATH = os.path.join(DB_PATH, "representations_facenet.pkl")
+
+# Timeouts
+CONNECTION_TIMEOUT = 3
+CAPTURE_TIMEOUT = 8
+
+# Number of photos
+REGISTRATION_PHOTOS = 3
+RECOGNITION_PHOTOS = 2
+
+# Max retries for face detection
+MAX_RETRIES = 3
+
+# ============================================
+# OPTIMIZED CONFIGURATIONS (BASED ON TEST RESULTS)
+# ============================================
+CONFIGS = {
+    "best_accuracy": {
+        "name": "рџЋЇ BEST ACCURACY",
+        "model": "Facenet512",
+        "detector": "retinaface",
+        "threshold": 0.12,        # Based on 0.0290 distance
+        "distance": 0.0290,
+        "speed": "slow"
+    },
+    "balanced": {
+        "name": "вљ–пёЏ BALANCED (RECOMMENDED)",
+        "model": "Facenet512",
+        "detector": "mtcnn",
+        "threshold": 0.18,         # Based on 0.0457 distance
+        "distance": 0.0457,
+        "speed": "fast"
+    },
+    "alternative": {
+        "name": "рџ”„ ALTERNATIVE",
+        "model": "ArcFace",
+        "detector": "mtcnn",
+        "threshold": 0.35,         # Based on 0.0970 distance
+        "distance": 0.0970,
+        "speed": "fast"
+    }
+}
+
+# Default to balanced configuration
+active_config = "balanced"
+RECOGNITION_MODEL = CONFIGS[active_config]["model"]
+RECOGNITION_DETECTOR = CONFIGS[active_config]["detector"]
+RECOGNITION_THRESHOLD = CONFIGS[active_config]["threshold"]
+
+# ============================================
+# CREATE FOLDERS
+# ============================================
+os.makedirs(DB_PATH, exist_ok=True)
+os.makedirs(RECORDS_PATH, exist_ok=True)
+print(f"рџ“Ѓ DB: {DB_PATH}")
+print(f"рџ“Ѓ Records: {RECORDS_PATH}")
+
+# ============================================
+# ARDUINO CONNECTION
+# ============================================
+arduino = None
+try:
+    arduino = serial.Serial(ARDUINO_PORT, 9600, timeout=1)
+    time.sleep(2)
+    print(f"вњ… Arduino connected on {ARDUINO_PORT}")
+except Exception as e:
+    print(f"вљ пёЏ Could not connect to Arduino: {e}")
+
+# ============================================
+# FUNCTION: Check camera connection
+# ============================================
+def check_connection():
+    """Verify camera connection"""
+    print("\nрџ”Ќ CHECKING CAMERA CONNECTION:")
+    ip = CAMERA_URL.replace("http://", "")
+    
+    try:
+        socket.gethostbyname(ip)
+        print(f"   вњ… IP {ip} is valid")
+    except:
+        print(f"   вќЊ IP {ip} is not valid")
+        return False
+    
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(2)
+    result = sock.connect_ex((ip, 80))
+    if result == 0:
+        print(f"   вњ… Port 80 is open")
+    else:
+        print(f"   вќЊ Port 80 is closed")
+        return False
+    sock.close()
+    
+    try:
+        response = urllib.request.urlopen(f"{CAMERA_URL}/capture", timeout=CONNECTION_TIMEOUT)
+        print(f"   вњ… Camera responds")
+        return True
+    except Exception as e:
+        print(f"   вќЊ Camera error: {e}")
+        return False
+
+# ============================================
+# FUNCTION: Capture image
+# ============================================
+def capture_image(attempts=2):
+    """Request photo from ESP32-CAM"""
+    for attempt in range(attempts):
+        try:
+            print(f"рџ“Ў Requesting photo (attempt {attempt+1}/{attempts})...")
+            
+            req = urllib.request.Request(
+                f"{CAMERA_URL}/capture",
+                headers={'User-Agent': 'Python/Recognition', 'Cache-Control': 'no-cache'}
+            )
+            
+            with urllib.request.urlopen(req, timeout=CAPTURE_TIMEOUT) as response:
+                img_array = np.array(bytearray(response.read()), dtype=np.uint8)
+                img = cv2.imdecode(img_array, -1)
+                
+            if img is None:
+                print("вќЊ Could not decode image")
+                continue
+                
+            print(f"вњ… Photo received: {img.shape[1]}x{img.shape[0]} pixels")
+            return img
+            
+        except Exception as e:
+            print(f"вќЊ Error: {e}")
+            if attempt < attempts - 1:
+                print("   Retrying...")
+                time.sleep(1)
+    
+    return None
+
+# ============================================
+# FUNCTION: Give lighting advice
+# ============================================
+def give_lighting_advice(img):
+    """Give advice about lighting conditions"""
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    brightness = np.mean(gray)
+    
+    if brightness < 50:
+        print("   рџ’Ў Advice: Too dark, need more light")
+        return False
+    elif brightness > 200:
+        print("   рџ’Ў Advice: Too bright, avoid direct light")
+        return False
+    else:
+        print("   рџ’Ў Advice: Good lighting!")
+        return True
+
+# ============================================
+# FUNCTION: Verify face in image
+# ============================================
+def verify_face_in_image(img, silent=False):
+    """Check if image contains a detectable face"""
+    temp_path = os.path.join(CURRENT_FOLDER, "temp_face_check.jpg")
+    cv2.imwrite(temp_path, img)
+    
+    try:
+        DeepFace.represent(
+            img_path=temp_path,
+            model_name=RECOGNITION_MODEL,
+            detector_backend=RECOGNITION_DETECTOR,
+            enforce_detection=True,
+            align=True,
+            silent=True
+        )
+        if not silent:
+            print("   вњ… Face detected")
+        return True
+    except:
+        if not silent:
+            print("   вќЊ No face detected")
+        return False
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+# ============================================
+# FUNCTION: List registered people
+# ============================================
+def list_registered():
+    """Show all registered people in the database"""
+    if not os.path.exists(DB_PATH):
+        print("рџ“Ѓ DB folder not found")
+        return
+    
+    # Get all jpg files (excluding angle photos for cleaner list)
+    all_files = [f for f in os.listdir(DB_PATH) if f.endswith('.jpg')]
+    
+    # Filter out angle photos for main list
+    main_photos = [f for f in all_files if '_angle' not in f]
+    angle_photos = [f for f in all_files if '_angle' in f]
+    
+    if not main_photos:
+        print("рџ“­ No registered people")
+        return
+    
+    print(f"\nрџ‘Ґ REGISTERED PEOPLE ({len(main_photos)}):")
+    print("-"*40)
+    
+    for i, file in enumerate(sorted(main_photos), 1):
+        # Get base name without extension and clean it
+        name = file.replace('.jpg', '').replace('_', ' ').title()
+        
+        # Count how many photos this person has (including angles)
+        base_name = file.replace('.jpg', '')
+        person_photos = [f for f in all_files if f.startswith(base_name) or 
+                        f.startswith(base_name.replace(' ', '_'))]
+        photo_count = len(person_photos)
+        
+        print(f"   {i}. {name} ({photo_count} photos)")
+    
+    # Show statistics
+    print("-"*40)
+    print(f"рџ“Љ Statistics:")
+    print(f"   вЂў Total people: {len(main_photos)}")
+    print(f"   вЂў Total photos: {len(all_files)}")
+    print(f"   вЂў Angle photos: {len(angle_photos)}")
+    
+    # Show representation file info
+    if os.path.exists(REPRESENTATIONS_PATH):
+        size_kb = os.path.getsize(REPRESENTATIONS_PATH) / 1024
+        size_mb = size_kb / 1024
+        if size_mb > 1:
+            print(f"   вЂў Face database: {size_mb:.2f} MB")
+        else:
+            print(f"   вЂў Face database: {size_kb:.1f} KB")
+    else:
+        print(f"   вЂў Face database: Not generated yet")
+
+# ============================================
+# FUNCTION: Register new person (IMPROVED)
+# ============================================
+def register_person():
+    """Register new person with 3 photos and quality checks"""
+    print("\n" + "="*60)
+    print("рџ“ќ REGISTRATION MODE")
+    print("="*60)
+    
+    name = input("рџ‘¤ Enter person's name: ").strip()
+    if not name:
+        print("вќЊ Invalid name")
+        return False
+    
+    clean_name = name.replace(" ", "_").lower()
+    full_path = os.path.join(DB_PATH, f"{clean_name}.jpg")
+    
+    if os.path.exists(full_path):
+        print(f"вљ пёЏ {name} already exists")
+        list_registered()
+        overwrite = input("Overwrite? (y/n): ").lower()
+        if overwrite != 'y':
+            return False
+    
+    print(f"\nрџ“ё Capturing {REGISTRATION_PHOTOS} photos...")
+    print("   рџ‘‰ Look straight, left, and right")
+    print("   рџ‘‰ Ensure good lighting on your face")
+    
+    photos = []
+    
+    for i in range(REGISTRATION_PHOTOS):
+        print(f"\n--- Photo {i+1}/{REGISTRATION_PHOTOS} ---")
+        if i == 0:
+            print("   рџ‘‰ Look STRAIGHT at camera")
+        elif i == 1:
+            print("   рџ‘‰ Look SLIGHTLY LEFT")
+        else:
+            print("   рџ‘‰ Look SLIGHTLY RIGHT")
+        
+        # Try to get a valid face photo with retries
+        face_detected = False
+        retries = 0
+        
+        while not face_detected and retries < MAX_RETRIES:
+            img = capture_image(attempts=2)
+            if img is None:
+                retries += 1
+                continue
+            
+            # Check lighting
+            lighting_ok = give_lighting_advice(img)
+            
+            # Check for face
+            if verify_face_in_image(img):
+                face_detected = True
+                photos.append(img)
+                print(f"   вњ… Photo {i+1} captured successfully")
+            else:
+                retries += 1
+                if retries < MAX_RETRIES:
+                    print(f"   вљ пёЏ Retry {retries}/{MAX_RETRIES}...")
+        
+        if not face_detected:
+            print(f"вќЊ Failed to capture valid face for photo {i+1}")
+            return False
+        
+        time.sleep(1)
+    
+    print("\nрџ”Ќ Verifying all photos...")
+    
+    # Verify all photos have faces
+    all_valid = True
+    for i, photo in enumerate(photos):
+        if not verify_face_in_image(photo, silent=True):
+            print(f"вќЊ Photo {i+1} failed verification")
+            all_valid = False
+            break
+    
+    if not all_valid:
+        print("вќЊ Registration failed: Some photos don't contain clear faces")
+        return False
+    
+    # Save all photos
+    cv2.imwrite(full_path, photos[0])
+    print(f"рџ’ѕ Saved: {clean_name}.jpg")
+    
+    for i, photo in enumerate(photos[1:], 2):
+        angle_path = os.path.join(DB_PATH, f"{clean_name}_angle{i}.jpg")
+        cv2.imwrite(angle_path, photo)
+        print(f"рџ’ѕ Saved: {clean_name}_angle{i}.jpg")
+    
+    # Clear cache to force regeneration
+    if os.path.exists(REPRESENTATIONS_PATH):
+        os.remove(REPRESENTATIONS_PATH)
+        print("рџ”„ Face database cache cleared")
+    
+    print(f"\nвњ… {name} registered successfully!")
+    return True
+
+# ============================================
+# FUNCTION: Delete person
+# ============================================
+def delete_person():
+    """Delete a person from the database"""
+    list_registered()
+    
+    all_files = [f for f in os.listdir(DB_PATH) if f.endswith('.jpg')]
+    main_photos = [f for f in all_files if '_angle' not in f]
+    
+    if not main_photos:
+        return
+    
+    try:
+        idx = int(input("\nрџ”ў Person number to delete: ")) - 1
+        if 0 <= idx < len(main_photos):
+            file_to_delete = main_photos[idx]
+            base_name = file_to_delete.replace('.jpg', '')
+            
+            print(f"\nрџ—‘пёЏ Files to delete:")
+            print(f"   вЂў {file_to_delete}")
+            
+            # Find and list all related files
+            related_files = [f for f in all_files if f.startswith(base_name)]
+            for f in related_files[1:]:
+                print(f"   вЂў {f}")
+            
+            confirm = input(f"\nDelete {len(related_files)} file(s)? (y/n): ").lower()
+            
+            if confirm == 'y':
+                for f in related_files:
+                    os.remove(os.path.join(DB_PATH, f))
+                    print(f"вњ… Deleted: {f}")
+                
+                # Delete representations to regenerate
+                if os.path.exists(REPRESENTATIONS_PATH):
+                    os.remove(REPRESENTATIONS_PATH)
+                    print("рџ”„ Face database updated")
+                
+                print(f"\nвњ… Person deleted successfully")
+            else:
+                print("вќЊ Deletion cancelled")
+        else:
+            print("вќЊ Invalid number")
+    except ValueError:
+        print("вќЊ Invalid input")
+
+# ============================================
+# FUNCTION: Recognize face
+# ============================================
+def recognize_face(image_path):
+    """
+    Face recognition using current optimized configuration
+    """
+    try:
+        db_files = [f for f in os.listdir(DB_PATH) if f.endswith('.jpg')]
+        if not db_files:
+            return "no_records", False, 0, None
+        
+        results = DeepFace.find(
+            img_path=image_path,
+            db_path=DB_PATH,
+            model_name=RECOGNITION_MODEL,
+            detector_backend=RECOGNITION_DETECTOR,
+            distance_metric="cosine",
+            enforce_detection=True,
+            align=True,
+            silent=True
+        )
+        
+        if len(results) > 0 and len(results[0]) > 0:
+            best_match = results[0].iloc[0]
+            file = best_match['identity']
+            person = os.path.basename(file).split('.')[0]
+            if '_angle' in person:
+                person = person.split('_angle')[0]
+            distance = best_match['distance']
+            
+            # Check for ambiguity
+            ambiguous = False
+            if len(results[0]) > 1:
+                second_distance = results[0].iloc[1]['distance']
+                if second_distance - distance < 0.08:
+                    ambiguous = True
+                    print(f"вљ пёЏ Ambiguous match (diff: {second_distance - distance:.4f})")
+            
+            accepted = distance < RECOGNITION_THRESHOLD and not ambiguous
+            
+            print(f"\nрџ“Љ Results ({RECOGNITION_MODEL}/{RECOGNITION_DETECTOR}):")
+            print(f"   вЂў Person: {person}")
+            print(f"   вЂў Distance: {distance:.4f}")
+            print(f"   вЂў Threshold: {RECOGNITION_THRESHOLD}")
+            print(f"   вЂў Accepted: {'вњ…' if accepted else 'вќЊ'}")
+            
+            return person, accepted, distance, None
+        else:
+            return "unknown", False, 1.0, None
+            
+    except Exception as e:
+        print(f"вљ пёЏ Error: {e}")
+        return "error", False, 1.0, None
+
+# ============================================
+# FUNCTION: Process recognition with voting (IMPROVED)
+# ============================================
+def process_recognition():
+    """Recognize with 2 photos and voting - WITH FACE VERIFICATION"""
+    print("\n" + "="*60)
+    print("рџ”Ќ RECOGNITION MODE")
+    print("="*60)
+    print(f"   {CONFIGS[active_config]['name']}")
+    print(f"   Model: {RECOGNITION_MODEL}")
+    print(f"   Detector: {RECOGNITION_DETECTOR}")
+    print(f"   Threshold: {RECOGNITION_THRESHOLD}")
+    print(f"   Test distance: {CONFIGS[active_config]['distance']:.4f}")
+    print("="*60)
+    
+    db_files = [f for f in os.listdir(DB_PATH) if f.endswith('.jpg')]
+    if not db_files:
+        print("вљ пёЏ No registered people. Use REGISTRATION mode first.")
+        return 0
+    
+    print(f"\nрџ“ё Capturing {RECOGNITION_PHOTOS} photos...")
+    print("   рџ‘‰ Look directly at camera")
+    print("   рџ‘‰ Ensure good lighting")
+    
+    photos = []
+    
+    for i in range(RECOGNITION_PHOTOS):
+        print(f"\n--- Photo {i+1} ---")
+        
+        # Try to get a valid face photo with retries
+        face_detected = False
+        retries = 0
+        
+        while not face_detected and retries < MAX_RETRIES:
+            img = capture_image()
+            if img is None:
+                retries += 1
+                continue
+            
+            # Check lighting
+            give_lighting_advice(img)
+            
+            # Quick face check
+            if verify_face_in_image(img):
+                face_detected = True
+                photos.append(img)
+                print(f"   вњ… Photo {i+1} captured successfully")
+            else:
+                retries += 1
+                if retries < MAX_RETRIES:
+                    print(f"   вљ пёЏ No face detected, retry {retries}/{MAX_RETRIES}...")
+        
+        if not face_detected:
+            print(f"вќЊ Failed to capture valid face for photo {i+1}")
+            if i == 0:
+                return 0
+            break
+    
+    if len(photos) < 1:
+        print("вќЊ No valid photos captured")
+        return 0
+    
+    print(f"\nвњ… Captured {len(photos)} valid photos")
+    
+    # Recognize each photo
+    results = []
+    for i, photo in enumerate(photos):
+        print(f"\n--- Analyzing photo {i+1} ---")
+        temp_path = os.path.join(CURRENT_FOLDER, f"temp_{i}.jpg")
+        cv2.imwrite(temp_path, photo)
+        
+        person, accepted, distance, _ = recognize_face(temp_path)
+        results.append({'person': person, 'accepted': accepted, 'distance': distance})
+        
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    
+    # Filter out error results
+    valid_results = [r for r in results if r['person'] != 'error' and r['distance'] < 1.0]
+    
+    if len(valid_results) == 0:
+        print("\nвќЊ No valid recognition results")
+        final_accepted = False
+        final_person = "error"
+        avg_distance = 1.0
+    elif len(valid_results) < len(photos):
+        print(f"\nвљ пёЏ Only {len(valid_results)}/{len(photos)} photos gave valid results")
+        # Use the valid results
+        accepted_photos = [r for r in valid_results if r['accepted']]
+        
+        if len(accepted_photos) == len(valid_results):
+            persons = [r['person'] for r in accepted_photos]
+            if all(p == persons[0] for p in persons):
+                final_accepted = True
+                final_person = persons[0]
+                avg_distance = sum(r['distance'] for r in accepted_photos) / len(accepted_photos)
+            else:
+                final_accepted = False
+                final_person = "conflict"
+                avg_distance = 1.0
+        else:
+            final_accepted = False
+            final_person = "unknown"
+            avg_distance = 1.0
+    else:
+        # All photos valid - normal voting
+        accepted_photos = [r for r in results if r['accepted']]
+        
+        if len(accepted_photos) == len(photos):
+            persons = [r['person'] for r in accepted_photos]
+            if all(p == persons[0] for p in persons):
+                final_accepted = True
+                final_person = persons[0]
+                avg_distance = sum(r['distance'] for r in accepted_photos) / len(accepted_photos)
+            else:
+                final_accepted = False
+                final_person = "conflict"
+                avg_distance = 1.0
+                print("вљ пёЏ Conflict: Photos matched different people")
+        else:
+            final_accepted = False
+            final_person = "unknown"
+            avg_distance = 1.0
+            print(f"вљ пёЏ Only {len(accepted_photos)}/{len(photos)} photos accepted")
+    
+    # Show results
+    print("\n" + "="*50)
+    print("рџ“Љ VOTING RESULTS:")
+    print("-"*50)
+    for i, r in enumerate(results):
+        status = "вњ…" if r['accepted'] else "вќЊ"
+        valid_tag = "" if r['person'] != 'error' else " (invalid)"
+        print(f"   Photo {i+1}: {status} {r['person']} ({r['distance']:.4f}){valid_tag}")
+    print("-"*50)
+    if final_accepted:
+        print(f"вњ… FINAL: ACCESS GRANTED - {final_person}")
+        print(f"   Avg distance: {avg_distance:.4f}")
+    else:
+        print(f"вќЊ FINAL: ACCESS DENIED - {final_person}")
+    print("="*50)
+    
+    # Save records
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    for i, (photo, r) in enumerate(zip(photos, results)):
+        status = "APPROVED" if final_accepted else "REJECTED"
+        clean_name = final_person if final_accepted else r['person']
+        filename = os.path.join(RECORDS_PATH, f"{timestamp}_{status}_{clean_name}_{r['distance']:.3f}_photo{i+1}.jpg")
+        cv2.imwrite(filename, photo)
+        print(f"рџ’ѕ Saved: {os.path.basename(filename)}")
+    
+    # Send to Arduino (only if we got valid results)
+    if arduino and len(valid_results) > 0:
+        cmd = b"OPEN\n" if final_accepted else b"DENIED\n"
+        arduino.write(cmd)
+        print(f"\nрџ”ґ Arduino: {'OPEN (LED OFF)' if final_accepted else 'DENIED (LED ON)'}")
+    elif arduino:
+        print("\nвљ пёЏ No valid results - not sending command to Arduino")
+    
+    return 1 if final_accepted else 0
+
+# ============================================
+# FUNCTION: Switch configuration
+# ============================================
+def switch_config():
+    """Switch between different configurations"""
+    global active_config, RECOGNITION_MODEL, RECOGNITION_DETECTOR, RECOGNITION_THRESHOLD
+    
+    print("\n" + "="*50)
+    print("рџ”„ AVAILABLE CONFIGURATIONS:")
+    print("-"*50)
+    
+    configs_list = list(CONFIGS.keys())
+    for i, key in enumerate(configs_list, 1):
+        config = CONFIGS[key]
+        marker = "в–¶ " if key == active_config else "  "
+        print(f"{marker}{i}. {config['name']}")
+        print(f"      Model: {config['model']}")
+        print(f"      Detector: {config['detector']}")
+        print(f"      Threshold: {config['threshold']}")
+        print(f"      Test distance: {config['distance']:.4f}")
+        print(f"      Speed: {config['speed']}")
+        print()
+    
+    try:
+        choice = input(f"Select configuration (1-{len(configs_list)}) or ENTER to cancel: ").strip()
+        if choice:
+            idx = int(choice) - 1
+            if 0 <= idx < len(configs_list):
+                new_config = configs_list[idx]
+                if new_config != active_config:
+                    active_config = new_config
+                    RECOGNITION_MODEL = CONFIGS[active_config]["model"]
+                    RECOGNITION_DETECTOR = CONFIGS[active_config]["detector"]
+                    RECOGNITION_THRESHOLD = CONFIGS[active_config]["threshold"]
+                    print(f"\nвњ… Switched to: {CONFIGS[active_config]['name']}")
+                else:
+                    print("\nвњ… Already using this configuration")
+    except (ValueError, IndexError):
+        print("вќЊ Invalid selection")
+
+# ============================================
+# FUNCTION: Test camera with face detection
+# ============================================
+def test_camera_with_face():
+    """Test camera and face detection"""
+    print("\nрџ”§ TESTING CAMERA WITH FACE DETECTION")
+    print("="*50)
+    
+    img = capture_image()
+    if img is None:
+        print("вќЊ Could not capture image")
+        return
+    
+    # Show image
+    cv2.imshow("Camera Test", img)
+    cv2.waitKey(1000)
+    cv2.destroyAllWindows()
+    
+    # Check lighting
+    lighting_ok = give_lighting_advice(img)
+    
+    # Check face
+    if verify_face_in_image(img):
+        print("вњ… Face detection: SUCCESS")
+    else:
+        print("вќЊ Face detection: FAILED")
+    
+    print("="*50)
+
+# ============================================
+# MAIN MENU
+# ============================================
+if __name__ == "__main__":
+    print("\n" + "="*70)
+    print("рџЋҐ FACIAL RECOGNITION SYSTEM - OPTIMIZED")
+    print("="*70)
+    print(f"рџ“Ѓ Base folder: {CURRENT_FOLDER}")
+    print(f"\nвљ™пёЏ ACTIVE CONFIGURATION:")
+    print(f"   {CONFIGS[active_config]['name']}")
+    print(f"   Model: {RECOGNITION_MODEL}")
+    print(f"   Detector: {RECOGNITION_DETECTOR}")
+    print(f"   Threshold: {RECOGNITION_THRESHOLD}")
+    print(f"   Test distance: {CONFIGS[active_config]['distance']:.4f}")
+    print("\nвњЁ IMPROVEMENTS:")
+    print("   вЂў Face verification during capture")
+    print("   вЂў Retry mechanism for failed detections")
+    print("   вЂў Lighting advice")
+    print("   вЂў Robust error handling")
+    print("="*70)
+    
+    # Check camera
+    if not check_connection():
+        print("\nвљ пёЏ Camera not responding")
+        cont = input("Continue anyway? (y/n): ").lower()
+        if cont != 'y':
+            exit()
+    
+    while True:
+        print("\n" + "-"*60)
+        print("рџ“‹ MAIN MENU")
+        print("-"*60)
+        print("   r в†’ рџ“ќ REGISTER new person (3 photos)")
+        print("   l в†’ рџ‘Ґ LIST registered people")
+        print("   e в†’ рџ—‘пёЏ DELETE person")
+        print("   enter в†’ рџ”Ќ RECOGNIZE (2 photos, voting)")
+        print("   c в†’ рџ”„ SWITCH configuration")
+        print(f"   Current: {CONFIGS[active_config]['name']}")
+        print("   f в†’ рџ”§ TEST face detection")
+        print("   t в†’ рџ”§ TEST camera connection")
+        print("   q в†’ вќЊ QUIT")
+        print("-"*60)
+        
+        cmd = input("вЊЁпёЏ Command: ").strip().lower()
+        
+        if cmd == 'q':
+            break
+        elif cmd == 'r':
+            register_person()
+        elif cmd == 'l':
+            list_registered()
+        elif cmd == 'e':
+            delete_person()
+        elif cmd == 't':
+            check_connection()
+        elif cmd == 'f':
+            test_camera_with_face()
+        elif cmd == 'c':
+            switch_config()
+        elif cmd == '':
+            process_recognition()
+        else:
+            print("вќЊ Invalid command")
+    
+    if arduino:
+        arduino.close()
+    print("\nрџ‘‹ System terminated")
+
+=== prueba_led.py ===
+import serial
+import time
+
+PUERTO_ARDUINO = "COM6"  # Cambia si es necesario
+print("рџ”Њ Probando Arduino...")
+
+try:
+    arduino = serial.Serial(PUERTO_ARDUINO, 9600, timeout=1)
+    time.sleep(2)
+    print("вњ… Conectado!")
+    
+    # Enviar OPEN (LED debe apagarse)
+    arduino.write(b"OPEN\n")
+    print("вњ… Enviado: OPEN - LED APAGADO")
+    time.sleep(2)
+    
+    # Enviar DENIED (LED debe encenderse)
+    arduino.write(b"DENIED\n")
+    print("вњ… Enviado: DENIED - LED ENCENDIDO")
+    time.sleep(2)
+    
+    arduino.close()
+    
+except Exception as e:
+    print(f"вќЊ Error: {e}")
+

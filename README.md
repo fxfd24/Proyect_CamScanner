@@ -1,2 +1,11 @@
-# Proyect_CamScanner
-A practical project by a PSU student. A project on user facial recognition and verification.
+# FaceID Door System
+
+Система контроля доступа на базе ESP32-CAM, Arduino Uno и Python (DeepFace).
+
+## Быстрый старт (Windows)
+
+1. **Клонируйте репозиторий:**
+   ```bash
+   git clone <ссылка_на_ваш_репозиторий>
+   cd Roman_Solution
+   ```

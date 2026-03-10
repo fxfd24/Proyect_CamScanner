@@ -11,7 +11,6 @@
 #include "esp_http_server.h"
 
 // ===== CONFIGURACIÓN WiFi =====
-// const char* ssid = "MTSRouter_2.4G_006254";
 const char* ssid = "MTSRouter_2.4G_006254";
 const char* password = "4bxGK2Nr";
 

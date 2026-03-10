@@ -1,5 +1,4 @@
 # FaceID Door System
-![железяки без проводов](Roman_Solution\proj.jpg)
 
 Система контроля доступа на базе ESP32-CAM, Arduino Uno и Python (DeepFace).
 

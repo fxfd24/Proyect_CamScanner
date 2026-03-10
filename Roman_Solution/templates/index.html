@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<body style="background:#000; color:#fff; font-family:sans-serif; text-align:center; padding:20px;">
+    <h1>CAPTURE STATION</h1>
+    
+    <button onclick="takePhoto()" style="padding:10px 20px; margin-bottom:20px; cursor:pointer;">📸 СДЕЛАТЬ ФОТО</button>
+    
+    <div id="preview" style="display:none; width:400px; margin:0 auto;">
+        <img id="img-preview" style="width:400px; border:2px solid #fff;">
+        <div style="margin-top:10px; display:flex; gap:10px; height:40px;">
+            <button onclick="verifyNow()" class="action-btn" style="background:#0a0; flex:2;">🔍 Верификация</button>
+            <button onclick="saveToDB()" class="action-btn" style="background:#333; flex:1;">💾</button>
+            <button onclick="clearPreview()" class="action-btn" style="background:#900; flex:1;">❌</button>
+        </div>
+    </div>
+
+    <style>
+        .action-btn { border:none; color:#fff; cursor:pointer; height:40px; }
+        .action-btn:hover { opacity:0.8; }
+    </style>
+
+    <script>
+        async function takePhoto() {
+            const res = await fetch('/capture_photo', {method: 'POST'});
+            const data = await res.json();
+            if(data.status == 'success') {
+                document.getElementById('img-preview').src = "data:image/jpeg;base64," + data.image;
+                document.getElementById('preview').style.display = 'block';
+            }
+        }
+        
+        async function clearPreview() {
+            await fetch('/clear', {method: 'POST'});
+            document.getElementById('preview').style.display = 'none';
+        }
+
+        async function saveToDB() {
+            const name = prompt("Введите имя пользователя для сохранения:");
+            if(!name) return;
+            const res = await fetch('/save_to_db', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: name})
+            });
+            const data = await res.json();
+            alert(data.message);
+            clearPreview();
+        }
+
+        async function verifyNow() {
+            const status = document.getElementById('stat'); // Если добавишь div с id="stat"
+            const res = await fetch('/verify', {method: 'POST'});
+            const data = await res.json();
+            alert(data.message + (data.distance ? " (Расстояние: " + data.distance + ")" : ""));
+        }
+    </script>
+</body>
+</html>
